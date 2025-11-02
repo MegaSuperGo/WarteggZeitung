@@ -36,6 +36,7 @@
         // 2. Deployment Fallback: Use the hardcoded config for GitHub Pages/standalone deployment
         if (!firebaseConfig) {
             console.warn("Using hardcoded Firebase config. Check your Anonymous Auth and Security Rules in this project!");
+            // !!! IMPORTANT: THIS HARDCODED CONFIG MUST MATCH YOUR NEW FIREBASE PROJECT !!!
             firebaseConfig = {
                 // This MUST be the actual config for the project where your Firestore data lives
                 apiKey: "AIzaSyAt8cCxk_o7MWJ2N-IFlZ1rXoy5uPuvPW0",
