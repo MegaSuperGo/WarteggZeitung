@@ -3,31 +3,153 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Die Wartegg Zeitung</title>
+    <title>Das Gebrüll des Löwen - Dynamisches CMS</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Google Font: Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght400;600;700;900&display=swap" rel="stylesheet">
+
+    <!-- Firebase Imports -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, addDoc, setDoc, deleteDoc, onSnapshot, collection, query, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // --- GLOBAL SETUP ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        // ** FIX: Use __firebase_config first, as it's required for the Canvas environment to work **
+        let firebaseConfig = null;
+        if (typeof __firebase_config !== 'undefined') {
+            try {
+                firebaseConfig = JSON.parse(__firebase_config);
+            } catch (e) {
+                console.error("Error parsing __firebase_config:", e);
+            }
+        }
+        
+        // Fallback for standalone use (if no __firebase_config is available)
+        if (!firebaseConfig) {
+            console.warn("Using fallback Firebase config.");
+            firebaseConfig = {
+                apiKey: "AIzaSyAt8cCxk_o7MWJ2N-IFlZ1rXoy5uPuvPW0",
+                authDomain: "warteggzeitung.firebaseapp.com",
+                projectId: "warteggzeitung",
+                storageBucket: "warteggzeitung.firebasestorage.app",
+                messagingSenderId: "326895861411",
+                appId: "1:326895861411:web:ce9fd14ae6b1e534a48916",
+                measurementId: "G-CD5TWGZG0C"
+            };
+        }
+        // ----------------------------------------------------------------------
+        
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        if (!firebaseConfig.apiKey) {
+            console.error("Firebase configuration is missing or incomplete. Cannot initialize database.");
+            window.db = null;
+            window.auth = null;
+            window.isAuthReady = true; // Set to true so main script doesn't wait forever
+        } else {
+            setLogLevel('debug'); // Enable Firestore logging
+            window.app = initializeApp(firebaseConfig);
+            window.db = getFirestore(window.app);
+            window.auth = getAuth(window.app);
+            window.isAuthReady = false; // Flag to check if auth is finished
+            
+            // Sign in process
+            (async () => {
+                try {
+                    let signedIn = false;
+                    
+                    if (initialAuthToken) {
+                        try {
+                            // 1. Try custom token provided by the Canvas environment
+                            await signInWithCustomToken(window.auth, initialAuthToken);
+                            console.log("Signed in with custom token.");
+                            signedIn = true;
+                        } catch (e) {
+                            // 2. FIX: Catch the custom auth error, log it, but proceed to fallback (anonymous sign-in)
+                            console.warn("Custom Auth Token failed (likely due to project mismatch or config issue). Falling back to anonymous sign-in.");
+                            console.error("Custom Auth Error:", e);
+                        }
+                    } 
+                    
+                    if (!signedIn) {
+                        // 3. If custom sign-in failed or was skipped, sign in anonymously
+                        await signInAnonymously(window.auth);
+                        console.log("Signed in anonymously.");
+                    }
+                    
+                    window.userId = window.auth.currentUser?.uid || crypto.randomUUID();
+                    window.isAuthReady = true; // Auth completed successfully
+
+                } catch (error) {
+                    // This catches the anonymous sign-in failure if that also fails
+                    console.error("Final Firebase Auth error. Cannot establish session:", error);
+                    window.isAuthReady = true; // Auth failed, but stop waiting
+                }
+            })();
+        }
+        
+        // Expose necessary Firestore functions globally for non-module script access
+        window.getFirestore = getFirestore;
+        window.collection = collection;
+        window.query = query;
+        window.onSnapshot = onSnapshot;
+        window.addDoc = addDoc;
+        window.doc = doc;
+        window.setDoc = setDoc;
+        window.deleteDoc = deleteDoc;
+        window.serverTimestamp = serverTimestamp;
+    </script>
+
 
     <style>
         /* Base font */
         body {
             font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* Lighter background */
         }
-        /* Custom class for the big, bold hero title */
         .title-font {
             font-family: 'Inter', sans-serif;
-            font-weight: 900; /* Extra bold */
+            font-weight: 900;
         }
-        /* Hover shadow for light mode */
         .hover-shadow:hover {
-            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.2); /* Subtle blue shadow on hover */
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.2);
         }
-        /* Hidden class for section switching */
         .hidden-section {
             display: none;
+        }
+        .admin-input {
+            @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-3;
+        }
+        .admin-label {
+            @apply block text-sm font-medium text-gray-700 mb-1;
+        }
+
+        /* Styles for the custom modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.75);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+        .modal-content {
+            animation: bounceIn 0.3s ease-out;
+        }
+
+        @keyframes bounceIn {
+            0% { transform: scale(0.8); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
         }
     </style>
 </head>
@@ -39,62 +161,145 @@
             <div class="flex justify-between items-center h-16">
                 <!-- Logo/Title -->
                 <div class="flex-shrink-0 flex items-center">
-                    <a href="javascript:void(0)" onclick="switchView('aktuelles', document.getElementById('nav-aktuelles'))" class="text-2xl font-bold title-font text-indigo-600 tracking-tight">
-                        DIE WARTEGG ZEITUNG
+                    <a href="javascript:void(0)" onclick="switchToReaderView('aktuelles', document.getElementById('nav-aktuelles'))" class="text-2xl font-bold title-font text-indigo-600 tracking-tight">
+                        DAS GEBRÜLL DES LÖWEN
                     </a>
                 </div>
                 
-                <!-- Navigation Links - Updated to use JavaScript for switching views -->
+                <!-- Navigation Links -->
                 <div class="flex space-x-6 sm:space-x-8">
                     <a 
                         href="javascript:void(0)" 
-                        onclick="switchView('aktuelles', this)" 
+                        onclick="switchToReaderView('aktuelles', this)" 
                         id="nav-aktuelles" 
                         class="nav-link border-indigo-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-semibold transition-colors">
                         Aktuelles
                     </a>
                     <a 
                         href="javascript:void(0)" 
-                        onclick="switchView('sport', this)" 
+                        onclick="switchToReaderView('sport', this)" 
                         id="nav-sport" 
-                        class="nav-link border-transparent text-gray-500 hover:border-cyan-500 hover:text-indigo-600 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors hover-shadow">
+                        class="nav-link border-transparent text-gray-500 hover:border-cyan-500 hover:text-indigo-600 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors">
                         Sport
                     </a>
                     <a 
                         href="javascript:void(0)" 
-                        onclick="switchView('kultur', this)" 
+                        onclick="switchToReaderView('kultur', this)" 
                         id="nav-kultur" 
-                        class="nav-link border-transparent text-gray-500 hover:border-cyan-500 hover:text-indigo-600 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors hover-shadow">
+                        class="nav-link border-transparent text-gray-500 hover:border-cyan-500 hover:text-indigo-600 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors">
                         Kultur
                     </a>
                     <a 
                         href="javascript:void(0)" 
-                        onclick="switchView('meinung', this)" 
+                        onclick="switchToReaderView('meinung', this)" 
                         id="nav-meinung" 
-                        class="nav-link border-transparent text-gray-500 hover:border-cyan-500 hover:text-indigo-600 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors hover-shadow">
+                        class="nav-link border-transparent text-gray-500 hover:border-cyan-500 hover:text-indigo-600 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors">
                         Meinung
                     </a>
                 </div>
-                
+
+                <!-- Staff Login/Admin Button -->
+                <button id="admin-toggle-btn" onclick="toggleAdminPanel()" class="bg-fuchsia-600 hover:bg-fuchsia-700 text-white text-sm font-medium py-2 px-4 rounded-full transition-colors shadow-lg">
+                    Staff Login
+                </button>
             </div>
         </nav>
     </header>
 
     <!-- Main Content -->
     <main class="container mx-auto px-4 sm:px-6 lg:px-8 mt-12">
+        
+        <!-- Loading Indicator -->
+        <div id="loading-spinner" class="text-center p-12 text-gray-500">
+            <svg class="animate-spin h-8 w-8 text-indigo-500 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p>Inhalte werden geladen...</p>
+        </div>
 
-        <!-- Article Detail View - Initially Hidden -->
+
+        <!-- ADMIN PANEL VIEW (Initially Hidden) -->
+        <section id="admin-panel-view" class="hidden-section mb-14 bg-white p-6 md:p-10 rounded-xl shadow-2xl border-2 border-fuchsia-500/50">
+            <h2 class="text-4xl font-extrabold text-fuchsia-600 border-b-4 border-fuchsia-500 inline-block pb-1 mb-8 tracking-tight">
+                Redaktionelle Verwaltung (CMS)
+            </h2>
+
+            <!-- Form for Adding/Editing Articles -->
+            <div class="bg-gray-50 p-6 rounded-lg mb-8 shadow-inner">
+                <h3 id="form-title" class="text-2xl font-bold mb-4 text-gray-700">Neuen Artikel hinzufügen</h3>
+                <form id="article-form" onsubmit="saveArticle(event)">
+                    <input type="hidden" id="article-id">
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label for="title" class="admin-label">Titel</label>
+                            <input type="text" id="title" name="title" required class="admin-input">
+                        </div>
+                        <div>
+                            <label for="author" class="admin-label">Autor</label>
+                            <input type="text" id="author" name="author" required class="admin-input" placeholder="Von Max Mustermann">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                        <div>
+                            <label for="category" class="admin-label">Kategorie</label>
+                            <select id="category" name="category" required class="admin-input">
+                                <option value="aktuelles">Aktuelles</option>
+                                <option value="sport">Sport</option>
+                                <option value="kultur">Kultur</option>
+                                <option value="meinung">Meinung</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="imageUrl" class="admin-label">Bild-URL (Platzhalter)</label>
+                            <input type="url" id="imageUrl" name="imageUrl" class="admin-input" placeholder="https://placehold.co/1200x600/...">
+                        </div>
+                    </div>
+                    
+                    <!-- Top Story Checkbox -->
+                    <div class="mt-4 flex items-center">
+                        <input type="checkbox" id="isTopStory" name="isTopStory" class="h-4 w-4 text-fuchsia-600 border-gray-300 rounded focus:ring-fuchsia-500">
+                        <label for="isTopStory" class="ml-2 block text-sm font-medium text-gray-700">
+                            Als **Top-Story** (Startseiten-Highlight) markieren
+                        </label>
+                    </div>
+
+                    <div class="mt-4">
+                        <label for="body" class="admin-label">Artikelinhalt (HTML/Text)</label>
+                        <textarea id="body" name="body" rows="8" required class="admin-input"></textarea>
+                    </div>
+
+                    <div class="mt-6 flex justify-end space-x-3">
+                        <button type="button" onclick="resetForm()" id="cancel-edit-btn" class="hidden bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-6 rounded-lg transition-colors">Abbrechen</button>
+                        <button type="submit" id="save-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded-lg transition-colors shadow-md">Speichern</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- List of Existing Articles -->
+            <div class="bg-white p-6 rounded-lg shadow-lg">
+                <h3 class="text-2xl font-bold mb-4 border-b pb-2 text-gray-700">Aktuelle Artikel</h3>
+                <div id="article-list-container" class="space-y-4">
+                    <!-- Article rows will be inserted here -->
+                </div>
+            </div>
+        </section>
+        
+
+        <!-- Article Detail View - Content Section -->
         <section id="article-detail" class="hidden-section mb-14 bg-white p-6 md:p-10 rounded-xl shadow-lg">
             <button 
-                onclick="switchView('aktuelles', document.getElementById('nav-aktuelles'))"
+                onclick="switchToReaderView(lastSectionId, document.getElementById(`nav-${lastSectionId}`))"
                 class="inline-flex items-center mb-6 text-indigo-600 hover:text-indigo-800 transition-colors font-semibold"
             >
-                <!-- Arrow Icon (lucide-react style) -->
+                <!-- Arrow Icon -->
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 mr-2"><path d="m15 18-6-6 6-6"/></svg>
                 Zurück zur Übersicht
             </button>
 
-            <img id="article-image" src="" alt="Artikelbild" class="w-full h-80 object-cover rounded-xl mb-8 shadow-md">
+            <img id="article-image" src="" alt="Artikelbild" class="w-full h-80 object-cover rounded-xl mb-8 shadow-md" onerror="this.src='https://placehold.co/1200x400/94a3b8/FFFFFF?text=Bild+wird+geladen...'">
             
             <span id="article-category" class="inline-block bg-fuchsia-600 text-white text-sm font-bold px-4 py-1 rounded-full uppercase tracking-widest mb-3 shadow-lg"></span>
 
@@ -102,277 +307,54 @@
             
             <p id="article-author" class="text-gray-600 text-lg font-medium mb-8"></p>
             
-            <!-- Article Body Content will be inserted here -->
             <div id="article-body" class="text-gray-800 text-base md:text-lg leading-relaxed space-y-6">
                 <!-- Dynamic content goes here -->
             </div>
         </section>
 
+        <!-- READER VIEW SECTIONS (Populated by Firestore) -->
+        <div id="reader-view">
+            <!-- Aktuelles Section -->
+            <section id="aktuelles" class="reader-section hidden-section mb-14">
+                <h2 class="text-4xl font-extrabold border-b-4 border-cyan-500 inline-block pb-1 mb-8 tracking-tight">Aktuelles</h2>
+                <!-- NEW: Hero container is outside the grid for full-width feature -->
+                <div id="aktuelles-hero">
+                    <!-- Top Story will be rendered here -->
+                </div>
+                <!-- Standard articles grid -->
+                <div id="aktuelles-content" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mt-10">
+                    <!-- Standard Aktuelles articles will be rendered here -->
+                </div>
+            </section>
 
-        <!-- Aktuelles (News) Section - CLASS: content-section for switching -->
-        <section id="aktuelles" class="content-section mb-14">
-            <!-- Section Title -->
-            <h2 class="text-4xl font-extrabold border-b-4 border-cyan-500 inline-block pb-1 mb-8 tracking-tight">
-                Aktuelles
-            </h2>
+            <!-- Sport Section -->
+            <section id="sport" class="reader-section hidden-section mb-14">
+                <h2 class="text-4xl font-extrabold border-b-4 border-fuchsia-500 inline-block pb-1 mb-8 tracking-tight">Sport</h2>
+                <div id="sport-content" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    <!-- Articles will be rendered here -->
+                </div>
+            </section>
             
-            <!-- Featured Story (Hero) - Now calls showArticle -->
-            <div class="mb-16">
-                <a 
-                    href="javascript:void(0)" 
-                    onclick="showArticle('hero')" 
-                    class="block group"
-                >
-                    <div class="relative rounded-xl overflow-hidden shadow-2xl h-72 md:h-[420px] transform transition-transform duration-500 group-hover:scale-[1.01] group-hover:shadow-xl group-hover:shadow-indigo-500/30">
-                        <!-- Background Image -->
-                        <img 
-                            src="https://placehold.co/1200x600/1E3A8A/FFFFFF?text=TOP+STORY" 
-                            alt="Top-Story Platzhalterbild" 
-                            class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                            onerror="this.src='https://placehold.co/1200x600/1E3A8A/FFFFFF?text=LADEFEHLER'"
-                        >
-                        <!-- Overlay Gradient -->
-                        <div class="absolute inset-0 bg-gradient-to-t from-gray-900/90 via-gray-900/50 to-transparent"></div>
-                        
-                        <!-- Text Content -->
-                        <div class="absolute bottom-0 left-0 p-6 md:p-12">
-                            <span class="inline-block bg-fuchsia-600 text-white text-sm font-bold px-4 py-1 rounded-full uppercase tracking-widest mb-3 shadow-lg">
-                                Top-Story
-                            </span>
-                            <h1 class="text-3xl md:text-5xl lg:text-6xl font-bold text-white title-font leading-tight">
-                                Die digitalisierung nimmt die Ruder
-                            </h1>
-                            <p class="text-cyan-300 text-sm md:text-xl mt-3 font-medium">
-                                Von Felix Tyx, Redakteur
-                            </p>
-                        </div>
-                    </div>
-                </a>
-            </div>
-
-            <!-- News Grid -->
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                <!-- Article Card 1: Baubeginn -->
-                <article class="bg-white rounded-xl border border-gray-200 overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-indigo-500/20">
-                    <a 
-                        href="javascript:void(0)" 
-                        onclick="showArticle('aktuelles-1')" 
-                        class="block group"
-                    >
-                        <img 
-                            src="https://placehold.co/600x400/5B21B6/FFFFFF?text=Wissenschaftstrakt" 
-                            alt="Baubeginn Wissenschaftstrakt" 
-                            class="w-full h-48 object-cover group-hover:opacity-90 transition-opacity duration-300"
-                            onerror="this.src='https://placehold.co/600x400/5B21B6/FFFFFF?text=BILD+FEHLT'"
-                        >
-                        <div class="p-6">
-                            <span class="text-indigo-600 text-xs font-semibold uppercase tracking-wider">Aktuelles</span>
-                            <h3 class="text-xl font-bold mt-2 mb-2 group-hover:text-cyan-500 transition-colors leading-snug">
-                                Modernisierung von Märchen ist im laufe
-                            </h3>
-                            <p class="text-gray-600 text-sm line-clamp-2">
-                                Heutzutage sind Märchen für die meisten sehr langweilig, doch hier kommen...
-                            </p>
-                            <p class="text-xs text-gray-500 mt-4">Von Anonym | Vor 2 Stunden</p>
-                        </div>
-                    </a>
-                </article>
-                
-                <!-- Article Card 2: Debate Team -->
-                <article class="bg-white rounded-xl border border-gray-200 overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-indigo-500/20">
-                    <a 
-                        href="javascript:void(0)" 
-                        onclick="showArticle('aktuelles-2')" 
-                        class="block group"
-                    >
-                        <img 
-                            src="https://placehold.co/600x400/047857/FFFFFF?text=Debate+Team" 
-                            alt="Debate Team" 
-                            class="w-full h-48 object-cover group-hover:opacity-90 transition-opacity duration-300"
-                            onerror="this.src='https://placehold.co/600x400/047857/FFFFFF?text=BILD+FEHLT'"
-                        >
-                        <div class="p-6">
-                            <span class="text-indigo-600 text-xs font-semibold uppercase tracking-wider">Aktuelles</span>
-                            <h3 class="text-xl font-bold mt-2 mb-2 group-hover:text-cyan-500 transition-colors leading-snug">
-                                Debate-Team holt den ersten Platz beim Regionalturnier
-                            </h3>
-                            <p class="text-gray-600 text-sm line-clamp-2">
-                                Das LHS Debate-Team hat sich im dritten Jahr in Folge als herausragend erwiesen...
-                            </p>
-                            <p class="text-xs text-gray-500 mt-4">Von Aisha Khan | Vor 5 Stunden</p>
-                        </div>
-                    </a>
-                </article>
-
-                <!-- Article Card 3: Kantinen-Optionen -->
-                <article class="bg-white rounded-xl border border-gray-200 overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-indigo-500/20">
-                    <a 
-                        href="javascript:void(0)" 
-                        onclick="showArticle('aktuelles-3')" 
-                        class="block group"
-                    >
-                        <img 
-                            src="https://placehold.co/600x400/BE185D/FFFFFF?text=Schulessen" 
-                            alt="Neue Kantinen-Optionen" 
-                            class="w-full h-48 object-cover group-hover:opacity-90 transition-opacity duration-300"
-                            onerror="this.src='https://placehold.co/600x400/BE185D/FFFFFF?text=BILD+FEHLT'"
-                        >
-                        <div class="p-6">
-                            <span class="text-indigo-600 text-xs font-semibold uppercase tracking-wider">Aktuelles</span>
-                            <h3 class="text-xl font-bold mt-2 mb-2 group-hover:text-cyan-500 transition-colors leading-snug">
-                                Neue Kantinen-Optionen: Volltreffer und Fehlschläge
-                            </h3>
-                            <p class="text-gray-600 text-sm line-clamp-2">
-                                Schüler reagieren auf die neue "Stell-dir-deine-Schüssel-zusammen"-Linie und die Abschaffung von...
-                            </p>
-                            <p class="text-xs text-gray-500 mt-4">Von Anonym | Vor 1 Tag</p>
-                        </div>
-                    </a>
-                </article>
-            </div>
-        </section>
-
-        <!-- Sport Section - CLASS: content-section for switching -->
-        <section id="sport" class="content-section hidden-section mb-14">
-            <h2 class="text-4xl font-extrabold border-b-4 border-fuchsia-500 inline-block pb-1 mb-8 tracking-tight">
-                Sport
-            </h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                <!-- Article Card 4: Fußball -->
-                <article class="bg-white rounded-xl border border-gray-200 overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-fuchsia-500/20">
-                    <a 
-                        href="javascript:void(0)" 
-                        onclick="showArticle('sport-1')" 
-                        class="block group"
-                    >
-                        <img 
-                            src="https://placehold.co/600x400/9A3412/FFFFFF?text=Fussball+Match" 
-                            alt="Fußballspiel" 
-                            class="w-full h-48 object-cover group-hover:opacity-90 transition-opacity duration-300"
-                            onerror="this.src='https://placehold.co/600x400/9A3412/FFFFFF?text=BILD+FEHLT'"
-                        >
-                        <div class="p-6">
-                            <span class="text-fuchsia-600 text-xs font-semibold uppercase tracking-wider">Sport</span>
-                            <h3 class="text-xl font-bold mt-2 mb-2 group-hover:text-cyan-500 transition-colors leading-snug">
-                                Varsity-Fußball sichert Playoff-Platz mit Sieg über Rivalen
-                            </h3>
-                            <p class="text-gray-600 text-sm line-clamp-2">
-                                Ein Last-Minute-Tor des Kapitäns.
-                            </p>
-                            <p class="text-xs text-gray-500 mt-4">Von Kevin Liu | Vor 22 Stunden</p>
-                        </div>
-                    </a>
-                </article>
-                
-                <!-- Article Card 5: Schwimmerin -->
-                <article class="bg-white rounded-xl border border-gray-200 overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-fuchsia-500/20">
-                    <a 
-                        href="javascript:void(0)" 
-                        onclick="showArticle('sport-2')" 
-                        class="block group"
-                    >
-                        <img 
-                            src="https://placehold.co/600x400/155E75/FFFFFF?text=Schwimmerin" 
-                            alt="Schwimmerin Profil" 
-                            class="w-full h-48 object-cover group-hover:opacity-90 transition-opacity duration-300"
-                            onerror="this.src='https://placehold.co/600x400/155E75/FFFFFF?text=BILD+FEHLT'"
-                        >
-                        <div class="p-6">
-                            <span class="text-fuchsia-600 text-xs font-semibold uppercase tracking-wider">Sport</span>
-                            <h3 class="text-xl font-bold mt-2 mb-2 group-hover:text-cyan-500 transition-colors leading-snug">
-                                Athleten-Spotlight: Sarah Jenkins über ihre rekordverdächtige Schwimmsaison
-                            </h3>
-                            <p class="text-gray-600 text-sm line-clamp-2">
-                                Jenkins spricht über ihr Training und ihre Ziele für das nächste Jahr.
-                            </p>
-                            <p class="text-xs text-gray-500 mt-4">Vom Redaktionsteam | Vor 2 Tagen</p>
-                        </div>
-                    </a>
-                </article>
-            </div>
-        </section>
-
-        <!-- Kultur Section (formerly part of grid) - CLASS: content-section for switching -->
-        <section id="kultur" class="content-section hidden-section mb-14">
-            <h2 class="text-4xl font-extrabold border-b-4 border-indigo-500 inline-block pb-1 mb-8 tracking-tight">
-                Kultur
-            </h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div class="space-y-6">
-                    <!-- Small Article Item 6: Theater -->
-                    <a 
-                        href="javascript:void(0)" 
-                        onclick="showArticle('kultur-1')" 
-                        class="block group p-4 -mx-4 rounded-lg hover:bg-gray-50 transition-colors duration-200"
-                    >
-                        <div class="flex items-center space-x-4">
-                            <img src="https://placehold.co/150x100/701A75/FFFFFF?text=Bühne" alt="Schultheater" class="w-32 h-20 object-cover rounded-md shadow-md flex-shrink-0" onerror="this.src='https://placehold.co/150x100/701A75/FFFFFF?text=BILD+FEHLT'">
-                            <div>
-                                <h3 class="font-bold group-hover:text-cyan-500 transition-colors leading-snug">"Romeo und Julia" neu interpretiert: Ein glanzvoller Erfolg</h3>
-                                <p class="text-xs text-gray-500 mt-1">Von Emily Rodriguez | Vor 3 Tagen</p>
-                            </div>
-                        </div>
-                    </a>
-                    <!-- Small Article Item 7: Kunst -->
-                    <a 
-                        href="javascript:void(0)" 
-                        onclick="showArticle('kultur-2')" 
-                        class="block group p-4 -mx-4 rounded-lg hover:bg-gray-50 transition-colors duration-200"
-                    >
-                        <div class="flex items-center space-x-4">
-                            <img src="https://placehold.co/150x100/9D174D/FFFFFF?text=Kunst" alt="Kunstausstellung" class="w-32 h-20 object-cover rounded-md shadow-md flex-shrink-0" onerror="this.src='https://placehold.co/150x100/9D174D/FFFFFF?text=BILD+FEHLT'">
-                            <div>
-                                <h3 class="font-bold group-hover:text-cyan-500 transition-colors leading-snug">Jährliche Schülerkunstausstellung zeigt verborgene Talente</h3>
-                                <p class="text-xs text-gray-500 mt-1">Vom Redaktionsteam | Vor 4 Tagen</p>
-                            </div>
-                        </div>
-                    </a>
+            <!-- Kultur Section -->
+            <section id="kultur" class="reader-section hidden-section mb-14">
+                <h2 class="text-4xl font-extrabold border-b-4 border-indigo-500 inline-block pb-1 mb-8 tracking-tight">Kultur</h2>
+                <div id="kultur-content" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    <!-- Articles will be rendered here -->
                 </div>
-            </div>
-        </section>
+            </section>
 
-        <!-- Meinung (Opinion) Section (formerly part of grid) - CLASS: content-section for switching -->
-        <section id="meinung" class="content-section hidden-section mb-14">
-            <h2 class="text-4xl font-extrabold border-b-4 border-amber-500 inline-block pb-1 mb-8 tracking-tight">
-                Meinung
-            </h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div class="space-y-6">
-                    <!-- Small Article Item 8 (Opinion): 4-Tage-Woche -->
-                    <a 
-                        href="javascript:void(0)" 
-                        onclick="showArticle('meinung-1')" 
-                        class="block group p-4 -mx-4 rounded-lg hover:bg-gray-50 transition-colors duration-200"
-                    >
-                        <div class="flex items-center space-x-4">
-                            <img src="https://placehold.co/150x100/92400E/FFFFFF?text=Kommentar" alt="Kommentar-Stück" class="w-32 h-20 object-cover rounded-md shadow-md flex-shrink-0" onerror="this.src='https://placehold.co/150x100/92400E/FFFFFF?text=BILD+FEHLT'">
-                            <div>
-                                <h3 class="font-bold group-hover:text-cyan-500 transition-colors leading-snug">Kommentar: Ist die 4-Tage-Schulwoche die Zukunft?</h3>
-                                <p class="text-xs text-gray-500 mt-1">Von Alex Johnson | Vor 1 Tag</p>
-                            </div>
-                        </div>
-                    </a>
-                    <!-- Small Article Item 9 (Opinion): Hausaufgaben -->
-                    <article 
-                        href="javascript:void(0)" 
-                        onclick="showArticle('meinung-2')" 
-                        class="block group p-4 -mx-4 rounded-lg hover:bg-gray-50 transition-colors duration-200"
-                    >
-                        <div class="flex items-center space-x-4">
-                            <img src="https://placehold.co/150x100/44403C/FFFFFF?text=Kommentar+2" alt="Kommentar-Stück 2" class="w-32 h-20 object-cover rounded-md shadow-md flex-shrink-0" onerror="this.src='https://placehold.co/150x100/44403C/FFFFFF?text=BILD+FEHLT'">
-                            <div>
-                                <h3 class="font-bold group-hover:text-cyan-500 transition-colors leading-snug">Das Argument gegen übermäßige Hausaufgaben</h3>
-                                <p class="text-xs text-gray-500 mt-1">Von Anonym | Vor 5 Tagen</p>
-                            </div>
-                        </div>
-                    </article>
+            <!-- Meinung Section -->
+            <section id="meinung" class="reader-section hidden-section mb-14">
+                <h2 class="text-4xl font-extrabold border-b-4 border-amber-500 inline-block pb-1 mb-8 tracking-tight">Meinung</h2>
+                <div id="meinung-content" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    <!-- Articles will be rendered here -->
                 </div>
-            </div>
-        </section>
+            </section>
+        </div>
 
 
-        <!-- Submit a Tip CTA - Always Visible in section view -->
-        <section id="cta-section" class="bg-indigo-600 text-white rounded-xl p-10 my-16 text-center shadow-2xl shadow-indigo-500/30">
+        <!-- Submit a Tip CTA - Always Visible in reader view -->
+        <section id="cta-section" class="bg-indigo-600 text-white rounded-xl p-10 my-16 text-center shadow-2xl shadow-indigo-500/30 hidden-section">
             <h2 class="text-4xl font-extrabold mb-4 tracking-tight">Hast du eine Story?</h2>
             <p class="text-lg mb-8 max-w-xl mx-auto text-indigo-200">
                 Wir verlassen uns auf Schüler wie dich, um die wichtigsten Geschichten zu finden. Siehst du etwas? Lass es uns wissen!
@@ -386,212 +368,639 @@
                 Tipp anonym einsenden
             </a>
         </section>
-        
-    </main>
 
-    <!-- Footer - Cleaned up -->
-    <footer class="border-t border-gray-200 mt-12">
-        <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <div class="flex flex-col md:flex-row justify-between items-center">
-                <div class="text-center md:text-left mb-4 md:mb-0">
-                    <p class="text-sm text-gray-600">&copy; 2025 Das Gebrüll des Löwen. Alle Rechte vorbehalten.</p>
-                    <p class="text-xs text-gray-500">Schulzeitung der Lincoln High School</p>
-                </div>
-                <!-- 'Unser Team' link removed -->
-                <div class="flex space-x-6">
-                    <!-- No links remaining in the right-hand side of the footer -->
+        <!-- Custom Staff Login Modal (FIX for window.prompt issue) -->
+        <div id="staff-login-modal" class="modal-overlay hidden-section hidden">
+            <div class="modal-content bg-white p-8 rounded-xl shadow-2xl w-full max-w-sm">
+                <h3 class="text-2xl font-bold text-gray-800 mb-4 flex items-center">
+                    Staff Login
+                    <svg class="w-6 h-6 ml-2 text-fuchsia-600" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 0 0-9.8 11.2 1 1 0 0 0 .5 1.5l1.6.4A8 8 0 0 1 12 20a8 8 0 0 0-4-1.3l-.7-.2a1 1 0 0 0-1.5.5A10 10 0 0 0 12 22"></path><path d="M12 2v20"></path><path d="M14 6h-4"></path><path d="M16 10h-8"></path><path d="M18 14h-8"></path></svg>
+                </h3>
+                <p class="text-sm text-gray-500 mb-6">Bitte gib das Staff-Passwort ein, um fortzufahren. (Hinweis: löwe)</p>
+                <form onsubmit="checkStaffPassword(event)">
+                    <input 
+                        type="password" 
+                        id="staff-password-input" 
+                        placeholder="Passwort" 
+                        required 
+                        class="w-full p-3 border border-gray-300 rounded-lg focus:ring-fuchsia-500 focus:border-fuchsia-500"
+                    >
+                    <p id="password-error-message" class="text-red-500 text-xs mt-2 hidden">Falsches Passwort!</p>
+                    <div class="flex justify-end space-x-3 mt-6">
+                        <button type="button" onclick="hideStaffModal()" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2 px-4 rounded-lg transition-colors">
+                            Abbrechen
+                        </button>
+                        <button type="submit" class="bg-fuchsia-600 hover:bg-fuchsia-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                            Einloggen
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- NEW: Custom CONFIRMATION Modal (for Löschen button) -->
+        <div id="confirmation-modal" class="modal-overlay hidden-section hidden">
+            <div class="modal-content bg-white p-8 rounded-xl shadow-2xl w-full max-w-sm">
+                <h3 class="text-xl font-bold text-red-600 mb-4 flex items-center">
+                    Aktion bestätigen
+                </h3>
+                <p id="confirmation-message" class="text-sm text-gray-700 mb-6">Möchtest du diesen Artikel wirklich unwiderruflich löschen?</p>
+                <div class="flex justify-end space-x-3 mt-6">
+                    <button type="button" id="confirm-cancel-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2 px-4 rounded-lg transition-colors">
+                        Abbrechen
+                    </button>
+                    <button type="button" id="confirm-ok-btn" class="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                        Bestätigen
+                    </button>
                 </div>
             </div>
         </div>
+        
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-gray-200 mt-12">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <p class="text-sm text-center text-gray-600">&copy; 2025 Das Gebrüll des Löwen. Powered by Firestore CMS.</p>
+        </div>
     </footer>
 
-    <!-- JavaScript for section switching and article view -->
+    <!-- JavaScript for Firestore and UI Logic -->
     <script>
-        // Central data structure for all article content
-        const articles = {
-            'hero': {
-                title: 'Löwen sichern Staatsmeisterschaft im dramatischen Overtime-Krimi',
-                author: 'Von Maria Sanchez, Chefredakteurin | Vor 1 Stunde',
-                body: '<p class="text-lg mb-6">**EIN UNGLAUBLICHES FINALE.** In einem epischen Endspiel, das bis in die Verlängerung ging, haben die Lincoln High Lions ihren ersten Staatsmeistertitel seit 15 Jahren im Eishockey gewonnen. Die Stimmung in der Arena war elektrisierend, als Kapitän Max Muster in der zweiten Minute der Overtime den Puck im Netz versenkte und damit den 3:2-Sieg besiegelte. Die Fans brachen in puren Jubel aus.</p><p class="text-lg mb-6">Trainer Schmidt lobte die unnachgiebige Verteidigung und den Teamgeist. "Das ist nicht nur ein Sieg für uns, das ist ein Sieg für die ganze Schule", sagte er unter Tränen der Freude. Die Feierlichkeiten werden voraussichtlich die ganze Woche andauern. Die Spieler bedankten sich bei den Fans für die lautstarke Unterstützung, die ihnen den entscheidenden Schub gegeben hatte.</p><p class="text-lg mb-6">Lesen Sie in unserer nächsten Ausgabe die detaillierte Spielanalyse und exklusive Interviews mit den Helden des Abends.</p>',
-                category: 'Aktuelles',
-                image: 'https://placehold.co/1200x600/1E3A8A/FFFFFF?text=STAATSMEISTERSCHAFT+SIEGER',
-                imageAlt: 'Jubelnde Eishockey-Mannschaft'
-            },
-            'aktuelles-1': {
-                title: 'Baubeginn für den neuen hochmodernen Wissenschaftstrakt',
-                author: 'Von David Chen | Vor 2 Stunden',
-                body: '<p class="text-lg mb-6">Nach monatelangen Planungen hat die Grundsteinlegung für den neuen Wissenschaftstrakt stattgefunden. Das 20-Millionen-Euro-Projekt wird modernste Labore für Biologie, Chemie und Physik sowie spezielle Räume für Robotik und Ingenieurwesen umfassen. Der Schulleiter betonte, dies sei ein großer Schritt in die Zukunft der MINT-Ausbildung an der LHS.</p><p class="text-lg mb-6">Die Bauarbeiten starten nächste Woche und die Fertigstellung wird für Herbst 2026 erwartet. Die Planung sieht vor, dass der reguläre Schulbetrieb so wenig wie möglich gestört wird, wobei temporäre Unterrichtsräume während der Hauptbauphase genutzt werden. Ein Blick auf die Architekturpläne zeigt ein lichtdurchflutetes, nachhaltiges Gebäude, das bald das Herzstück des Campus bilden soll.</p>',
-                category: 'Aktuelles',
-                image: 'https://placehold.co/800x450/5B21B6/FFFFFF?text=WISSENSCHAFTSTRAKT+PLANUNG',
-                imageAlt: 'Visualisierung des neuen Gebäudes'
-            },
-            'aktuelles-2': {
-                title: 'Debate-Team holt den ersten Platz beim Regionalturnier',
-                author: 'Von Aisha Khan | Vor 5 Stunden',
-                body: '<p class="text-lg mb-6">Das LHS Debate-Team hat sich im dritten Jahr in Folge als herausragend erwiesen und den ersten Platz beim prestigeträchtigen Regionalturnier gewonnen. Das Team setzte sich gegen 30 andere Schulen durch, indem es in den Finalrunden durchweg überzeugende Argumente lieferte und rhetorisches Geschick bewies. Besonders hervorgehoben wurde die Leistung von Juniorin Lena Meyer, die zur besten Rednerin des Turniers gekürt wurde.</p><p class="text-lg mb-6">Der Erfolg wird auf das intensive Training und die ausgezeichnete Vorbereitung durch ihren Coach zurückgeführt. Das Team freut sich nun auf die Teilnahme an den Landesmeisterschaften nächsten Monat.</p>',
-                category: 'Aktuelles',
-                image: 'https://placehold.co/800x450/047857/FFFFFF?text=DEBATE+TEAM+SIEGER',
-                imageAlt: 'Debate Team bei der Siegerehrung'
-            },
-            'aktuelles-3': {
-                title: 'Neue Kantinen-Optionen: Volltreffer und Fehlschläge',
-                author: 'Von Anonym | Vor 1 Tag',
-                body: '<p class="text-lg mb-6">Die Einführung der neuen "Stell-dir-deine-Schüssel-zusammen"-Linie wurde von den Schülern begeistert aufgenommen – endlich mehr Kontrolle über das Mittagessen! Die Auswahl an frischen Zutaten und Proteinen ist beeindruckend.</p><p class="text-lg mb-6">Weniger gut kam die gleichzeitige Abschaffung der klassischen Pizza-Option an, die viele als Grundnahrungsmittel betrachteten. Die Redaktion fordert die Kantinenleitung auf, über einen Kompromiss nachzudenken: mehr gesunde Vielfalt, aber bitte die Klassiker nicht vergessen!</p>',
-                category: 'Aktuelles',
-                image: 'https://placehold.co/800x450/BE185D/FFFFFF?text=KANTINE+ESSEN',
-                imageAlt: 'Schulessen-Optionen'
-            },
-            'sport-1': {
-                title: 'Varsity-Fußball sichert Playoff-Platz mit Sieg über Rivalen',
-                author: 'Von Kevin Liu | Vor 22 Stunden',
-                body: '<p class="text-lg mb-6">Die Varsity-Fußballmannschaft hat in einem nervenaufreibenden Spiel gegen ihren Erzrivalen einen entscheidenden 2:1-Sieg errungen und sich damit vorzeitig einen Playoff-Platz gesichert. Der entscheidende Treffer fiel in der 89. Minute durch einen fulminanten Volleyschuss von Mittelfeldspieler Jonas Müller.</p><p class="text-lg mb-6">Die Defensive hielt in der zweiten Halbzeit stand und überstand einen späten Sturmlauf des Gegners. Die Löwen gehen mit viel Schwung in die Endrunde der Saison!</p>',
-                category: 'Sport',
-                image: 'https://placehold.co/800x450/9A3412/FFFFFF?text=FUSSBALL+PLAYOFF',
-                imageAlt: 'Fußballspieler beim Jubeln'
-            },
-            'sport-2': {
-                title: 'Athleten-Spotlight: Sarah Jenkins über ihre rekordverdächtige Schwimmsaison',
-                author: 'Vom Redaktionsteam | Vor 2 Tagen',
-                body: '<p class="text-lg mb-6">Sarah Jenkins (Klasse 11) hat in dieser Saison alle Rekorde gebrochen. Im Interview spricht die Ausnahmeschwimmerin über die Härte ihres Trainingsplans, die Balance zwischen Schule und Sport und ihre Ambitionen, an den nationalen Wettkämpfen teilzunehmen.</p><p class="text-lg mb-6">"Es ist ein Opfer, aber es zahlt sich aus, wenn man sieht, wie sich die harte Arbeit im Wasser auszahlt", sagte Jenkins. Sie ist eine Inspiration für alle jungen Athleten der LHS.</p>',
-                category: 'Sport',
-                image: 'https://placehold.co/800x450/155E75/FFFFFF?text=SCHWIMMERIN+INTERVIEW',
-                imageAlt: 'Schwimmerin beim Start'
-            },
-            'kultur-1': {
-                title: '"Romeo und Julia" neu interpretiert: Ein glanzvoller Erfolg',
-                author: 'Von Emily Rodriguez | Vor 3 Tagen',
-                body: '<p class="text-lg mb-6">Die diesjährige Theaterproduktion, eine moderne, mutige Neuinterpretation von Shakespeares "Romeo und Julia", war ein voller Erfolg. Die kreative Regie und die beeindruckende schauspielerische Leistung der Hauptdarsteller haben das Publikum begeistert. Besonders das Bühnenbild, das eine düstere, industrielle Kulisse zeigte, erhielt viel Lob.</p><p class="text-lg mb-6">Die Schüler haben gezeigt, dass Klassiker auch heute noch relevant und fesselnd sein können.</p>',
-                category: 'Kultur',
-                image: 'https://placehold.co/800x450/701A75/FFFFFF?text=THEATERSTÜCK+ERFOLG',
-                imageAlt: 'Szene aus dem Theaterstück'
-            },
-            'kultur-2': {
-                title: 'Jährliche Schülerkunstausstellung zeigt verborgene Talente',
-                author: 'Vom Redaktionsteam | Vor 4 Tagen',
-                body: '<p class="text-lg mb-6">Die jährliche Kunstausstellung präsentierte eine atemberaubende Vielfalt an Werken, von abstrakter Malerei über Keramik bis hin zu digitaler Kunst. Die Ausstellung ist nicht nur ein Schaufenster für das Talent der Schüler, sondern bietet auch einen wichtigen Raum für kreativen Ausdruck und Dialog.</p><p class="text-lg mb-6">Eine Galerie mit den besten Werken der Ausstellung finden Sie in unserer nächsten Printausgabe.</p>',
-                category: 'Kultur',
-                image: 'https://placehold.co/800x450/9D174D/FFFFFF?text=KUNSTAUSSTELLUNG+GALERIE',
-                imageAlt: 'Bilder in einer Kunstgalerie'
-            },
-            'meinung-1': {
-                title: 'Kommentar: Ist die 4-Tage-Schulwoche die Zukunft?',
-                author: 'Von Alex Johnson | Vor 1 Tag',
-                body: '<p class="text-lg mb-6">In dieser Kolumne argumentiert Alex Johnson, dass die Einführung einer 4-Tage-Schulwoche die Produktivität der Schüler erhöhen, Burnout reduzieren und den Lehrern mehr Zeit für Vorbereitung und Weiterbildung geben könnte. Kritiker befürchten jedoch, dass die Konzentration des Stoffes an den verbleibenden Tagen zu überwältigend sein könnte.</p><p class="text-lg mb-6">Es ist eine Debatte, die es wert ist, geführt zu werden, wenn wir über eine modernere und gesündere Lernumgebung nachdenken.</p>',
-                category: 'Meinung',
-                image: 'https://placehold.co/800x450/92400E/FFFFFF?text=KOMMENTAR+4+TAGE+WOCHE',
-                imageAlt: 'Kalenderbild mit hervorgehobenen Tagen'
-            },
-            'meinung-2': {
-                title: 'Das Argument gegen übermäßige Hausaufgaben',
-                author: 'Von Anonym | Vor 5 Tagen',
-                body: '<p class="text-lg mb-6">Ein anonymer Schüler argumentiert leidenschaftlich gegen die aktuelle Menge an Hausaufgaben, die die Freizeit, das soziale Leben und die psychische Gesundheit der Schüler negativ beeinflusst. Die Kolumne schlägt vor, Hausaufgaben auf das Wesentliche zu reduzieren und mehr Fokus auf projektbasiertes Lernen im Unterricht zu legen.</p><p class="text-lg mb-6">Die Redaktion lädt alle Leser ein, ihre Meinungen zu diesem kontroversen Thema einzusenden.</p>',
-                category: 'Meinung',
-                image: 'https://placehold.co/800x450/44403C/FFFFFF?text=HAUSAUFGABEN+KRITIK',
-                imageAlt: 'Stapel von Schulbüchern'
-            },
-        };
-
-        // Stores the last active section ID before showing an article
+        // --- CONSTANTS AND STATE ---
+        const STAFF_PASSWORD = 'löwe'; 
+        let isAdmin = false;
         let lastSectionId = 'aktuelles';
+        let allArticles = []; // Global store for articles
+        let confirmationCallback = null; // Used for custom confirmation modal
 
-        // Function to switch between main sections (Aktuelles, Sport, Kultur, Meinung)
-        function switchView(sectionId, clickedElement) {
-            // 0. Store the section ID if it's a main section
-            if (['aktuelles', 'sport', 'kultur', 'meinung'].includes(sectionId)) {
-                lastSectionId = sectionId;
+        // --- FIREBASE SETUP ---
+        function getArticlesCollection() {
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+            const db = window.db;
+            if (!db) {
+                console.error("Firestore is not initialized.");
+                return null;
             }
-            
-            // 1. Hide all content sections and the article detail view
-            const sections = document.querySelectorAll('.content-section, #article-detail, #cta-section');
-            sections.forEach(section => {
-                section.classList.add('hidden-section');
-            });
+            // Public collection path: /artifacts/{appId}/public/data/articles
+            return collection(db, `artifacts/${appId}/public/data/articles`);
+        };
+        
+        // --- AUTHENTICATION & ADMIN TOGGLE ---
 
-            // 2. Show the requested main section and the CTA
+        function showStaffModal() {
+            document.getElementById('staff-password-input').value = '';
+            document.getElementById('password-error-message').classList.add('hidden');
+            document.getElementById('staff-login-modal').classList.remove('hidden-section');
+            document.getElementById('staff-login-modal').classList.remove('hidden');
+            document.getElementById('staff-password-input').focus();
+        }
+
+        function hideStaffModal() {
+            document.getElementById('staff-login-modal').classList.add('hidden-section');
+            document.getElementById('staff-login-modal').classList.add('hidden');
+        }
+
+        function checkStaffPassword(event) {
+            event.preventDefault();
+            const passwordInput = document.getElementById('staff-password-input');
+            const password = passwordInput.value.trim();
+            const errorMessage = document.getElementById('password-error-message');
+
+            if (password === STAFF_PASSWORD) {
+                isAdmin = true;
+                hideStaffModal(); // Hide the modal on successful login
+                document.getElementById('admin-toggle-btn').textContent = "Admin Mode (ON)";
+                document.getElementById('admin-toggle-btn').classList.remove('bg-fuchsia-600');
+                document.getElementById('admin-toggle-btn').classList.add('bg-green-600');
+                switchToAdminView();
+                customAlert('Erfolgreich im Admin Mode angemeldet!', 'success');
+            } else {
+                errorMessage.classList.remove('hidden');
+                passwordInput.value = '';
+                passwordInput.focus();
+                customAlert('Falsches Passwort!', 'error');
+            }
+        }
+
+        function toggleAdminPanel() {
+            if (!isAdmin) {
+                // Show custom modal instead of window.prompt
+                showStaffModal(); 
+            } else {
+                // Log out
+                isAdmin = false;
+                document.getElementById('admin-toggle-btn').textContent = "Staff Login";
+                document.getElementById('admin-toggle-btn').classList.remove('bg-green-600');
+                document.getElementById('admin-toggle-btn').classList.add('bg-fuchsia-600');
+                switchToReaderView(lastSectionId, document.getElementById(`nav-${lastSectionId}`));
+                customAlert('Admin Mode beendet.', 'info');
+            }
+        }
+
+        // --- VIEW SWITCHING ---
+
+        function hideAllViews() {
+            const sections = document.querySelectorAll('.reader-section, #article-detail, #cta-section, #admin-panel-view, #loading-spinner');
+            sections.forEach(section => section.classList.add('hidden-section'));
+        }
+
+        function switchToAdminView() {
+            if (!isAdmin) return;
+            hideAllViews();
+            document.getElementById('admin-panel-view').classList.remove('hidden-section');
+            document.getElementById('admin-toggle-btn').focus();
+        }
+
+        function switchToReaderView(sectionId, clickedElement) {
+            hideAllViews();
+
+            // Show the requested section and CTA
             const targetSection = document.getElementById(sectionId);
+            const articleDetail = document.getElementById('article-detail');
             const ctaSection = document.getElementById('cta-section');
 
-            if (targetSection) {
-                targetSection.classList.remove('hidden-section');
-                // The CTA should only be visible when viewing a section (not the article detail)
-                if (sectionId !== 'article-detail') {
-                    ctaSection.classList.remove('hidden-section');
-                }
+            if (sectionId === 'article-detail') {
+                articleDetail.classList.remove('hidden-section');
+            } else {
+                // If switching to a main section
+                lastSectionId = sectionId;
+                if (targetSection) targetSection.classList.remove('hidden-section');
+                ctaSection.classList.remove('hidden-section');
             }
-
-            // 3. Update the active navigation link style only if a nav link was clicked
+            
+            // Update Navigation Styles
             const navLinks = document.querySelectorAll('.nav-link');
             navLinks.forEach(link => {
-                // Reset to default style
                 link.classList.remove('border-indigo-500', 'text-gray-900', 'font-semibold');
                 link.classList.add('border-transparent', 'text-gray-500', 'font-medium');
             });
 
-            // Set active style for the clicked link (only if the click came from the header nav)
             if (clickedElement && clickedElement.classList.contains('nav-link')) {
                 clickedElement.classList.add('border-indigo-500', 'text-gray-900', 'font-semibold');
                 clickedElement.classList.remove('border-transparent', 'text-gray-500', 'font-medium');
             }
 
-            // Scroll to the top of the main content area
             document.querySelector('main').scrollIntoView({ behavior: 'smooth' });
         }
+
+
+        // --- FIREBASE DATA HANDLING (LISTENER) ---
+        function listenForArticles() {
+            const articleRef = getArticlesCollection();
+            if (!articleRef) return;
+            
+            // Query: Get all articles, sorted by timestamp descending
+            const articleQuery = query(articleRef);
+
+            onSnapshot(articleQuery, (snapshot) => {
+                const fetchedArticles = [];
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    fetchedArticles.push({
+                        id: doc.id,
+                        title: data.title,
+                        author: data.author,
+                        category: data.category,
+                        imageUrl: data.imageUrl,
+                        body: data.body,
+                        // NEW: Read the Top Story flag
+                        isTopStory: !!data.isTopStory, 
+                        timestamp: data.timestamp ? data.timestamp.toDate() : new Date(), // Convert Firestore Timestamp to JS Date
+                        timestampValue: data.timestamp ? data.timestamp.toDate().getTime() : 0, // Value for sorting
+                    });
+                });
+                
+                // Sort by timestamp (newest first)
+                fetchedArticles.sort((a, b) => b.timestampValue - a.timestampValue);
+                allArticles = fetchedArticles;
+
+                renderReaderView(allArticles);
+                renderAdminList(allArticles);
+                document.getElementById('loading-spinner').classList.add('hidden-section');
+                
+                // Ensure the correct view is shown after loading
+                if (!isAdmin) {
+                     switchToReaderView(lastSectionId, document.getElementById(`nav-${lastSectionId}`));
+                } else {
+                     switchToAdminView();
+                }
+
+            }, (error) => {
+                console.error("Error listening to articles:", error);
+                document.getElementById('loading-spinner').innerHTML = `<p class="text-red-600">Fehler beim Laden der Inhalte: ${error.message}</p>`;
+            });
+        }
+
+        // --- READER VIEW RENDERING ---
+        function renderReaderView(articles) {
+            // 1. Clear all category containers (including the new Hero container)
+            document.getElementById('aktuelles-hero').innerHTML = ''; 
+            document.getElementById('aktuelles-content').innerHTML = '';
+            document.getElementById('sport-content').innerHTML = '';
+            document.getElementById('kultur-content').innerHTML = '';
+            document.getElementById('meinung-content').innerHTML = '';
+
+            // Find the hero first: 1. Explicitly marked Top Story, 2. Newest 'aktuelles' article
+            let heroArticle = articles.find(a => a.isTopStory);
+            let articlesToRender = [...articles];
+
+            // 2. Render Hero if found
+            if (heroArticle) {
+                // If a hero is found, render it and filter it out of the card list
+                renderHeroArticle(heroArticle, heroArticle.isTopStory);
+                articlesToRender = articlesToRender.filter(a => a.id !== heroArticle.id);
+            } else {
+                 // Fallback message if no articles exist and no hero was found
+                 if (articles.length === 0) {
+                     document.getElementById('aktuelles-content').innerHTML = '<p class="col-span-full text-center text-gray-500 p-8">Keine Artikel gefunden. Bitte füge einen neuen Artikel im Admin Panel hinzu!</p>';
+                 }
+            }
+
+
+            // 3. Render the remaining articles as cards
+            articlesToRender.forEach((article) => {
+                const containerId = `${article.category}-content`;
+                const container = document.getElementById(containerId);
+                if (container) {
+                    container.innerHTML += createCardHTML(article);
+                }
+            });
+        }
         
-        // Function to display a specific article
+        // Renders the single featured (Hero) article
+        function renderHeroArticle(article, isExplicitTopStory) {
+            const tagText = isExplicitTopStory ? 'TOP-STORY' : article.category.toUpperCase();
+            const tagColor = isExplicitTopStory ? 'bg-red-600' : 'bg-fuchsia-600';
+
+            const articleHTML = `
+                <div class="mb-16 col-span-full">
+                    <a 
+                        href="javascript:void(0)" 
+                        onclick="showArticle('${article.id}')" 
+                        class="block group"
+                    >
+                        <div class="relative rounded-xl overflow-hidden shadow-2xl h-72 md:h-[420px] transform transition-transform duration-500 group-hover:scale-[1.01] group-hover:shadow-xl group-hover:shadow-indigo-500/30">
+                            <!-- Background Image -->
+                            <img 
+                                src="${article.imageUrl || 'https://placehold.co/1200x600/1E3A8A/FFFFFF?text=TOP+STORY'}" 
+                                alt="${article.title}" 
+                                class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                                onerror="this.src='https://placehold.co/1200x600/1E3A8A/FFFFFF?text=LADEFEHLER'"
+                            >
+                            <!-- Overlay Gradient -->
+                            <div class="absolute inset-0 bg-gradient-to-t from-gray-900/90 via-gray-900/50 to-transparent"></div>
+                            
+                            <!-- Text Content -->
+                            <div class="absolute bottom-0 left-0 p-6 md:p-12">
+                                <span class="inline-block ${tagColor} text-white text-sm font-bold px-4 py-1 rounded-full uppercase tracking-widest mb-3 shadow-lg">
+                                    ${tagText}
+                                </span>
+                                <h1 class="text-3xl md:text-5xl lg:text-6xl font-bold text-white title-font leading-tight">
+                                    ${article.title}
+                                </h1>
+                                <p class="text-cyan-300 text-sm md:text-xl mt-3 font-medium">
+                                    ${article.author} | ${formatDate(article.timestamp)}
+                                </p>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            `;
+            // Insert the Hero into its dedicated container
+            document.getElementById('aktuelles-hero').innerHTML = articleHTML;
+        }
+
+        // Renders a standard article card
+        function createCardHTML(article) {
+            const categoryColor = getCategoryColor(article.category);
+            return `
+                <article class="bg-white rounded-xl border border-gray-200 overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-indigo-500/20">
+                    <a 
+                        href="javascript:void(0)" 
+                        onclick="showArticle('${article.id}')" 
+                        class="block group"
+                    >
+                        <img 
+                            src="${article.imageUrl || 'https://placehold.co/600x400/94a3b8/FFFFFF?text=Bild+fehlt'}" 
+                            alt="${article.title}" 
+                            class="w-full h-48 object-cover group-hover:opacity-90 transition-opacity duration-300"
+                            onerror="this.src='https://placehold.co/600x400/94a3b8/FFFFFF?text=BILD+FEHLT'"
+                        >
+                        <div class="p-6">
+                            <span class="text-${categoryColor}-600 text-xs font-semibold uppercase tracking-wider">${article.category}</span>
+                            <h3 class="text-xl font-bold mt-2 mb-2 group-hover:text-cyan-500 transition-colors leading-snug line-clamp-2">
+                                ${article.title}
+                            </h3>
+                            <p class="text-gray-600 text-sm line-clamp-2">
+                                ${article.body.replace(/<[^>]*>?/gm, '').substring(0, 80)}...
+                            </p>
+                            <p class="text-xs text-gray-500 mt-4">${article.author} | ${formatDate(article.timestamp)}</p>
+                        </div>
+                    </a>
+                </article>
+            `;
+        }
+
+        // --- ARTICLE DETAIL VIEW ---
         function showArticle(articleId) {
-            const articleData = articles[articleId];
+            const articleData = allArticles.find(a => a.id === articleId);
             
             if (!articleData) {
-                // If article ID is not found, show a placeholder or go back to Aktuelles
-                console.error('Article not found for ID:', articleId);
-                alert('Dieser Artikel ist leider noch nicht online verfügbar. Wir arbeiten daran!');
-                switchView(lastSectionId, document.getElementById(`nav-${lastSectionId}`));
+                customAlert('Artikel nicht gefunden!', 'error');
+                switchToReaderView(lastSectionId, document.getElementById(`nav-${lastSectionId}`));
                 return;
             }
 
             // Populate the article detail section
             document.getElementById('article-title').textContent = articleData.title;
-            document.getElementById('article-author').textContent = articleData.author;
+            document.getElementById('article-author').textContent = `${articleData.author} | ${formatDate(articleData.timestamp)}`;
             document.getElementById('article-body').innerHTML = articleData.body;
-            document.getElementById('article-category').textContent = articleData.category;
-            document.getElementById('article-image').src = articleData.image;
-            document.getElementById('article-image').alt = articleData.imageAlt;
+            document.getElementById('article-category').textContent = articleData.category.toUpperCase();
+            document.getElementById('article-category').className = `inline-block bg-${getCategoryColor(articleData.category)}-600 text-white text-sm font-bold px-4 py-1 rounded-full uppercase tracking-widest mb-3 shadow-lg`;
+            document.getElementById('article-image').src = articleData.imageUrl || 'https://placehold.co/1200x400/94a3b8/FFFFFF?text=Bild+fehlt';
+            document.getElementById('article-image').alt = articleData.title;
 
             // Switch view to the dedicated article section
-            switchView('article-detail', null);
+            switchToReaderView('article-detail', null);
+        }
+        
+        // --- ADMIN LIST RENDERING ---
+        function renderAdminList(articles) {
+            const listContainer = document.getElementById('article-list-container');
+            listContainer.innerHTML = '';
+
+            if (articles.length === 0) {
+                 listContainer.innerHTML = '<p class="text-gray-500">Noch keine Artikel vorhanden.</p>';
+                 return;
+            }
+
+            articles.forEach(article => {
+                const isTopStoryIndicator = article.isTopStory 
+                    ? '<span class="text-xs text-red-500 font-bold ml-2">(TOP)</span>' 
+                    : '';
+                const articleRow = document.createElement('div');
+                articleRow.className = 'flex justify-between items-center p-3 border-b border-gray-100 hover:bg-indigo-50 rounded-md transition-colors';
+                articleRow.innerHTML = `
+                    <div class="truncate">
+                        <p class="font-semibold text-gray-800 truncate flex items-center">${article.title} ${isTopStoryIndicator}</p>
+                        <p class="text-xs text-gray-500">Kategorie: ${article.category} | ${formatDate(article.timestamp)}</p>
+                    </div>
+                    <div class="flex space-x-2 flex-shrink-0">
+                        <button onclick="editArticle('${article.id}')" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium">Bearbeiten</button>
+                        <!-- Updated to use the new custom confirmation modal -->
+                        <button onclick="deleteArticle('${article.id}')" class="text-sm text-red-600 hover:text-red-800 font-medium">Löschen</button>
+                    </div>
+                `;
+                listContainer.appendChild(articleRow);
+            });
+        }
+
+        // --- ADMIN CRUD FUNCTIONS ---
+
+        function getFormData(form) {
+            const data = {};
+            new FormData(form).forEach((value, key) => {
+                data[key] = value.trim();
+            });
+            
+            // Handle Top Story checkbox explicitly
+            data.isTopStory = document.getElementById('isTopStory').checked;
+
+            // Ensure the body is wrapped in paragraphs if it's plain text (for consistent rendering)
+            if (data.body && !data.body.match(/<[a-z][\s\S]*>/i)) {
+                 data.body = data.body.split('\n').map(p => `<p class="text-lg mb-6">${p}</p>`).join('');
+            }
+            return data;
+        }
+
+        async function saveArticle(event) {
+            event.preventDefault();
+            if (!isAdmin) {
+                customAlert("Du bist nicht berechtigt, Artikel zu speichern.", 'error');
+                return;
+            }
+
+            const form = event.target;
+            const articleId = document.getElementById('article-id').value;
+            const articleData = getFormData(form);
+            const articleRef = getArticlesCollection();
+            
+            if (!articleRef) return;
+
+            try {
+                // Add timestamp (only set when adding/saving, Firestore handles its own update time)
+                articleData.timestamp = serverTimestamp();
+
+                if (articleId) {
+                    // Update existing document
+                    const docRef = doc(articleRef, articleId);
+                    await setDoc(docRef, articleData, { merge: true });
+                    customAlert('Artikel erfolgreich aktualisiert!', 'success');
+                } else {
+                    // Add new document
+                    await addDoc(articleRef, articleData);
+                    customAlert('Neuer Artikel erfolgreich hinzugefügt!', 'success');
+                }
+                
+                resetForm();
+
+            } catch (e) {
+                console.error("Fehler beim Speichern des Artikels: ", e);
+                customAlert(`Fehler beim Speichern: ${e.message}`, 'error');
+            }
+        }
+
+        function editArticle(articleId) {
+            const articleData = allArticles.find(a => a.id === articleId);
+            if (!articleData) return;
+
+            // Populate the form fields
+            document.getElementById('article-id').value = articleData.id;
+            document.getElementById('title').value = articleData.title;
+            document.getElementById('author').value = articleData.author;
+            document.getElementById('category').value = articleData.category;
+            document.getElementById('imageUrl').value = articleData.imageUrl;
+            
+            // Set Top Story checkbox
+            document.getElementById('isTopStory').checked = !!articleData.isTopStory;
+
+            // Clean HTML tags from the body for editing in the textarea
+            let bodyText = articleData.body.replace(/<p class="text-lg mb-6">/g, '').replace(/<\/p>/g, '\n').trim();
+            document.getElementById('body').value = bodyText;
+
+
+            // Update button text and title
+            document.getElementById('form-title').textContent = `Artikel bearbeiten: ${articleData.title.substring(0, 30)}...`;
+            document.getElementById('save-btn').textContent = 'Änderungen speichern';
+            document.getElementById('cancel-edit-btn').classList.remove('hidden');
+
+            // Scroll form into view
+            document.getElementById('admin-panel-view').scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        // NEW: Function to handle the actual delete after confirmation
+        async function performDelete(articleId) {
+            const articleRef = getArticlesCollection();
+            if (!articleRef) return;
+
+            try {
+                const docRef = doc(articleRef, articleId);
+                await deleteDoc(docRef); // Firestore delete operation
+                customAlert('Artikel erfolgreich gelöscht!', 'success');
+            } catch (e) {
+                console.error("Fehler beim Löschen des Artikels: ", e);
+                customAlert(`Fehler beim Löschen: ${e.message}`, 'error');
+            }
+        }
+
+        // NEW: Function to trigger the custom confirmation modal
+        function deleteArticle(articleId) {
+             if (!isAdmin) {
+                customAlert("Du bist nicht berechtigt, Artikel zu löschen.", 'error');
+                return;
+            }
+            
+            // Show the custom modal and pass the deletion logic in the callback
+            showConfirmationModal("Bist du sicher, dass du diesen Artikel unwiderruflich löschen möchtest?", (confirmed) => {
+                if (confirmed) {
+                    performDelete(articleId);
+                } else {
+                    customAlert('Löschvorgang abgebrochen.', 'info');
+                }
+            });
+        }
+
+        function resetForm() {
+            document.getElementById('article-form').reset();
+            document.getElementById('article-id').value = '';
+            document.getElementById('isTopStory').checked = false; // Reset checkbox
+            document.getElementById('form-title').textContent = 'Neuen Artikel hinzufügen';
+            document.getElementById('save-btn').textContent = 'Speichern';
+            document.getElementById('cancel-edit-btn').classList.add('hidden');
+        }
+
+        // --- CUSTOM MODAL CONFIRMATION LOGIC ---
+
+        function showConfirmationModal(message, callback) {
+            confirmationCallback = callback;
+            document.getElementById('confirmation-message').textContent = message;
+            document.getElementById('confirmation-modal').classList.remove('hidden-section', 'hidden');
+        }
+
+        function hideConfirmationModal() {
+            document.getElementById('confirmation-modal').classList.add('hidden-section', 'hidden');
         }
 
 
-        document.addEventListener('DOMContentLoaded', () => {
-            // Initialize view to Aktuelles on load
-            switchView('aktuelles', document.getElementById('nav-aktuelles'));
-        });
+        // --- UTILITY FUNCTIONS ---
+        function formatDate(date) {
+            const now = new Date();
+            const diffInHours = Math.abs(now - date) / 36e5; // 1000 * 60 * 60
+            
+            if (diffInHours < 24) {
+                return date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+            } else if (diffInHours < 72) {
+                return date.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' });
+            } else {
+                return date.toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' });
+            }
+        }
+
+        function getCategoryColor(category) {
+            switch (category.toLowerCase()) {
+                case 'aktuelles':
+                    return 'indigo';
+                case 'sport':
+                case 'fuchsia': // Tailwind needs full class name in source, so we include it here
+                    return 'fuchsia';
+                case 'kultur':
+                    return 'purple';
+                case 'meinung':
+                    return 'amber';
+                default:
+                    return 'gray';
+            }
+        }
         
-        // Custom alert function to avoid window.alert in iFrame environments
-        function alert(message) {
+        function customAlert(message, type = 'info') {
+            const colorMap = {
+                success: 'bg-green-100 text-green-800 border-green-400',
+                error: 'bg-red-100 text-red-800 border-red-400',
+                info: 'bg-blue-100 text-blue-800 border-blue-400'
+            };
+            
             const messageBox = document.createElement('div');
             messageBox.style.cssText = `
                 position: fixed; top: 20px; right: 20px; 
-                background-color: #fca5a5; color: #dc2626; padding: 15px; 
-                border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); 
+                padding: 15px; border-radius: 8px; border: 1px solid;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.2); 
                 font-weight: bold; z-index: 9999;
-                animation: fadein 0.5s, fadeout 0.5s 3s;
+                max-width: 300px;
+                animation: fadein 0.5s, fadeout 0.5s 3s forwards;
             `;
+            messageBox.className = colorMap[type] || colorMap.info;
             messageBox.textContent = message;
             document.body.appendChild(messageBox);
             
             setTimeout(() => {
-                document.body.removeChild(messageBox);
-            }, 3500); // Remove after 3.5 seconds
+                if (document.body.contains(messageBox)) {
+                     messageBox.style.animation = 'fadeout 0.5s forwards';
+                     setTimeout(() => document.body.removeChild(messageBox), 500);
+                }
+            }, 3000);
 
-            // Simple CSS keyframes for the notification
-            const style = document.createElement('style');
-            style.textContent = `
-                @keyframes fadein { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
-                @keyframes fadeout { from { opacity: 1; } to { opacity: 0; } }
-            `;
-            document.head.appendChild(style);
+            if (!document.getElementById('alert-style')) {
+                const style = document.createElement('style');
+                style.id = 'alert-style';
+                style.textContent = `
+                    @keyframes fadein { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+                    @keyframes fadeout { from { opacity: 1; } to { opacity: 0; } }
+                `;
+                document.head.appendChild(style);
+            }
         }
+
+        // --- INITIALIZATION ---
+        function waitForAuthAndStart() {
+            if (window.db) {
+                // Check every 200ms if the authentication process has completed
+                let attempts = 0;
+                const maxAttempts = 50; // 50 * 200ms = 10s timeout
+                const interval = setInterval(() => {
+                    if (window.isAuthReady || attempts >= maxAttempts) {
+                        clearInterval(interval);
+                        if (window.isAuthReady) {
+                            listenForArticles();
+                        } else {
+                            // If it timed out
+                            console.error("Firebase Auth failed to resolve within timeout.");
+                            document.getElementById('loading-spinner').innerHTML = `<p class="text-red-600">Datenbank-Autorisierung fehlgeschlagen. Bitte versuche es neu.</p>`;
+                        }
+                    }
+                    attempts++;
+                }, 200);
+            } else {
+                // Show error if Firebase failed to initialize
+                document.getElementById('loading-spinner').innerHTML = `<p class="text-red-600">Datenbankverbindung fehlgeschlagen. Bitte überprüfen Sie die Firebase-Konfiguration.</p>`;
+            }
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            // Setup confirmation modal buttons
+            document.getElementById('confirm-cancel-btn').addEventListener('click', () => {
+                hideConfirmationModal();
+                if (confirmationCallback) confirmationCallback(false);
+            });
+
+            document.getElementById('confirm-ok-btn').addEventListener('click', () => {
+                hideConfirmationModal();
+                if (confirmationCallback) confirmationCallback(true);
+            });
+            
+            // Start waiting for authentication before fetching data
+            waitForAuthAndStart();
+        });
     </script>
 
 </body>
