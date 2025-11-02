@@ -13,28 +13,100 @@
 
     <!-- Firebase Imports -->
     <script type="module">
-  // Import the functions you need from the SDKs you need
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js";
-  import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-analytics.js";
-  // TODO: Add SDKs for Firebase products that you want to use
-  // https://firebase.google.com/docs/web/setup#available-libraries
+        // Using a common stable version for broader compatibility
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, addDoc, setDoc, deleteDoc, onSnapshot, collection, query, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // --- GLOBAL SETUP & CONFIGURATION ---
+        // When deployed (e.g., GitHub Pages), these global variables are UNDEFINED.
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        let firebaseConfig = null;
 
-  // Your web app's Firebase configuration
-  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-  const firebaseConfig = {
-    apiKey: "AIzaSyAt8cCxk_o7MWJ2N-IFlZ1rXoy5uPuvPW0",
-    authDomain: "warteggzeitung.firebaseapp.com",
-    projectId: "warteggzeitung",
-    storageBucket: "warteggzeitung.firebasestorage.app",
-    messagingSenderId: "326895861411",
-    appId: "1:326895861411:web:ce9fd14ae6b1e534a48916",
-    measurementId: "G-CD5TWGZG0C"
-  };
+        // 1. Try to use the Canvas config first
+        if (typeof __firebase_config !== 'undefined') {
+            try {
+                firebaseConfig = JSON.parse(__firebase_config);
+            } catch (e) {
+                console.error("Error parsing __firebase_config:", e);
+            }
+        }
+        
+        // 2. Deployment Fallback: Use the hardcoded config for GitHub Pages/standalone deployment
+        if (!firebaseConfig) {
+            console.warn("Using hardcoded Firebase config. Check your Anonymous Auth and Security Rules in this project!");
+            firebaseConfig = {
+                // This MUST be the actual config for the project where your Firestore data lives
+                apiKey: "AIzaSyAt8cCxk_o7MWJ2N-IFlZ1rXoy5uPuvPW0",
+                authDomain: "warteggzeitung.firebaseapp.com",
+                projectId: "warteggzeitung", // <--- IMPORTANT: This must match your project
+                storageBucket: "warteggzeitung.firebasestorage.app",
+                messagingSenderId: "326895861411",
+                appId: "1:326895861411:web:ce9fd14ae6b1e534a48916",
+                measurementId: "G-CD5TWGZG0C"
+            };
+        }
+        // ----------------------------------------------------------------------
+        
+        if (!firebaseConfig.apiKey) {
+            console.error("Firebase configuration is missing or incomplete. Cannot initialize database.");
+            window.db = null;
+            window.auth = null;
+            window.isAuthReady = true; 
+        } else {
+            setLogLevel('debug'); // Enable Firestore logging
+            window.app = initializeApp(firebaseConfig);
+            window.db = getFirestore(window.app);
+            window.auth = getAuth(window.app);
+            window.isAuthReady = false; 
+            
+            // --- AUTHENTICATION PROCESS ---
+            (async () => {
+                try {
+                    let signedIn = false;
+                    
+                    if (initialAuthToken) {
+                        try {
+                            // 1. Try custom token (Canvas environment only)
+                            await signInWithCustomToken(window.auth, initialAuthToken);
+                            console.log("Signed in with custom token (Canvas).");
+                            signedIn = true;
+                        } catch (e) {
+                            console.warn("Custom Auth Token failed. Falling back to anonymous sign-in.");
+                            // Console error intentionally removed here to prevent double logging of expected Canvas errors
+                        }
+                    } 
+                    
+                    if (!signedIn) {
+                        // 2. Anonymous sign-in (Runs on deployment/fallback)
+                        await signInAnonymously(window.auth);
+                        console.log("Signed in anonymously (Deployment/Fallback).");
+                    }
+                    
+                    window.userId = window.auth.currentUser?.uid || crypto.randomUUID();
+                    window.isAuthReady = true; 
 
-  // Initialize Firebase
-  const app = initializeApp(firebaseConfig);
-  const analytics = getAnalytics(app);
-</script>
+                } catch (error) {
+                    // This block catches if anonymous sign-in ALSO fails (e.g., provider disabled in console)
+                    console.error("Final Firebase Auth error. Cannot establish session. Check Firebase Console Auth settings:", error);
+                    window.isAuthReady = true; 
+                }
+            })();
+        }
+        
+        // Expose necessary Firestore functions globally
+        window.getFirestore = getFirestore;
+        window.collection = collection;
+        window.query = query;
+        window.onSnapshot = onSnapshot;
+        window.addDoc = addDoc;
+        window.doc = doc;
+        window.setDoc = setDoc;
+        window.deleteDoc = deleteDoc;
+        window.serverTimestamp = serverTimestamp;
+    </script>
+
 
     <style>
         /* Base font */
@@ -365,6 +437,8 @@
 
         // --- FIREBASE SETUP ---
         function getArticlesCollection() {
+            // Note: When deployed, appId = 'default-app-id'. 
+            // The path becomes: /artifacts/default-app-id/public/data/articles
             const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
             const db = window.db;
             if (!db) {
@@ -516,8 +590,8 @@
                 }
 
             }, (error) => {
-                console.error("Error listening to articles:", error);
-                document.getElementById('loading-spinner').innerHTML = `<p class="text-red-600">Fehler beim Laden der Inhalte: ${error.message}</p>`;
+                console.error("Error listening to articles (check security rules!):", error);
+                document.getElementById('loading-spinner').innerHTML = `<p class="text-red-600">Fehler beim Laden der Inhalte. Prüfe die Firebase Konsole (Anonymous Auth/Security Rules).</p>`;
             });
         }
 
@@ -902,16 +976,16 @@
                         if (window.isAuthReady) {
                             listenForArticles();
                         } else {
-                            // If it timed out
-                            console.error("Firebase Auth failed to resolve within timeout.");
-                            document.getElementById('loading-spinner').innerHTML = `<p class="text-red-600">Datenbank-Autorisierung fehlgeschlagen. Bitte versuche es neu.</p>`;
+                            // If it timed out or auth failed
+                            console.error("Firebase Auth failed to resolve within timeout or failed during sign-in.");
+                            document.getElementById('loading-spinner').innerHTML = `<p class="text-red-600">Datenbank-Autorisierung fehlgeschlagen. Prüfe die Browser-Konsole für Details.</p>`;
                         }
                     }
                     attempts++;
                 }, 200);
             } else {
                 // Show error if Firebase failed to initialize
-                document.getElementById('loading-spinner').innerHTML = `<p class="text-red-600">Datenbankverbindung fehlgeschlagen. Bitte überprüfen Sie die Firebase-Konfiguration.</p>`;
+                document.getElementById('loading-spinner').innerHTML = `<p class="text-red-600">Datenbankverbindung fehlgeschlagen. Bitte überprüfe die Firebase-Konfiguration.</p>`;
             }
         }
         
