@@ -155,6 +155,47 @@
         }
     </style>
 </head>
+    <script>
+(function () {
+    const SITE_PASSWORD = "WarteggZeitung2026!";
+
+    function tryUnlock() {
+        const input = document.getElementById("site-password-input");
+        const error = document.getElementById("site-password-error");
+        const lock = document.getElementById("site-lock");
+
+        if (!input || !lock) return;
+
+        if (input.value === SITE_PASSWORD) {
+            sessionStorage.setItem("siteUnlocked", "true");
+            lock.remove();
+        } else {
+            error.classList.remove("hidden");
+            input.value = "";
+            input.focus();
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        const lock = document.getElementById("site-lock");
+        const btn = document.getElementById("site-unlock-btn");
+        const input = document.getElementById("site-password-input");
+
+        if (sessionStorage.getItem("siteUnlocked") === "true" && lock) {
+            lock.remove();
+            return;
+        }
+
+        if (btn) btn.addEventListener("click", tryUnlock);
+        if (input) {
+            input.addEventListener("keydown", (e) => {
+                if (e.key === "Enter") tryUnlock();
+            });
+        }
+    });
+})();
+</script>
+
 <body class="bg-white text-gray-900 transition-colors duration-300">
 <!-- WEBSITE PASSWORD GATE -->
 <div id="site-lock" class="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
