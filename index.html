@@ -93,17 +93,6 @@
                     console.error("Final Firebase Auth error. Cannot establish session. Check Firebase Console Auth settings:", error);
                     window.isAuthReady = true; 
                 }
-                
-                { const correctPassword = "WarteggZeitung2026!";
-                const userPassword = prompt("Enter password to access this site:");
-            
-                if (userPassword !== correctPassword) {
-                  alert("Wrong password. Access denied.");
-                  document.body.innerHTML = "";
-                  window.location.href = "about:blank";
-                }
-
-
             })();
         }
         
