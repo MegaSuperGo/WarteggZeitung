@@ -155,73 +155,7 @@
         }
     </style>
 </head>
-    <script>
-(function () {
-    const SITE_PASSWORD = "WarteggZeitung2026!";
-
-    function tryUnlock() {
-        const input = document.getElementById("site-password-input");
-        const error = document.getElementById("site-password-error");
-        const lock = document.getElementById("site-lock");
-
-        if (!input || !lock) return;
-
-        if (input.value === SITE_PASSWORD) {
-            sessionStorage.setItem("siteUnlocked", "true");
-            lock.remove();
-        } else {
-            error.classList.remove("hidden");
-            input.value = "";
-            input.focus();
-        }
-    }
-
-    document.addEventListener("DOMContentLoaded", () => {
-        const lock = document.getElementById("site-lock");
-        const btn = document.getElementById("site-unlock-btn");
-        const input = document.getElementById("site-password-input");
-
-        if (sessionStorage.getItem("siteUnlocked") === "true" && lock) {
-            lock.remove();
-            return;
-        }
-
-        if (btn) btn.addEventListener("click", tryUnlock);
-        if (input) {
-            input.addEventListener("keydown", (e) => {
-                if (e.key === "Enter") tryUnlock();
-            });
-        }
-    });
-})();
-</script>
-
 <body class="bg-white text-gray-900 transition-colors duration-300">
-<!-- WEBSITE PASSWORD GATE -->
-<div id="site-lock" class="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
-    <div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-sm text-center">
-        <h2 class="text-2xl font-extrabold mb-2 text-indigo-600">Die Wartegg Zeitung</h2>
-        <p class="text-sm text-gray-500 mb-6">Bitte Passwort eingeben</p>
-
-        <input
-            type="password"
-            id="site-password-input"
-            placeholder="Passwort"
-            class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-        >
-
-        <p id="site-password-error" class="text-red-500 text-sm mt-2 hidden">
-            Falsches Passwort
-        </p>
-
-        <button
-            onclick="unlockSite()"
-            class="mt-6 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-lg transition"
-        >
-            Enter
-        </button>
-    </div>
-</div>
 
     <!-- Header & Navigation -->
     <header class="border-b border-gray-200 sticky top-0 bg-white/95 backdrop-blur-sm z-50 shadow-md">
@@ -824,7 +758,7 @@
                 `;
                 listContainer.appendChild(articleRow);
             });
-
+        }
 
         // --- ADMIN CRUD FUNCTIONS ---
 
@@ -923,41 +857,7 @@
                 customAlert(`Fehler beim Löschen: ${e.message}`, 'error');
             }
         }
-        <script>
-    const SITE_PASSWORD = "WarteggZeitung2026!";
 
-    window.unlockSite = function () {
-        const input = document.getElementById("site-password-input");
-        const error = document.getElementById("site-password-error");
-        const lock = document.getElementById("site-lock");
-
-        if (!input || !lock) return;
-
-        if (input.value === SITE_PASSWORD) {
-            sessionStorage.setItem("siteUnlocked", "true");
-            lock.remove(); // 💥 removes the overlay completely
-        } else {
-            error.classList.remove("hidden");
-            input.value = "";
-            input.focus();
-        }
-    };
-
-    document.addEventListener("DOMContentLoaded", () => {
-        const lock = document.getElementById("site-lock");
-        if (sessionStorage.getItem("siteUnlocked") === "true" && lock) {
-            lock.remove();
-        }
-    });
-</script>
-
-
-    
-        document.addEventListener("DOMContentLoaded", () => {
-            if (sessionStorage.getItem("siteUnlocked") === "true") {
-                document.getElementById("site-lock").style.display = "none";
-            }
-        }
         // NEW: Function to trigger the custom confirmation modal
         function deleteArticle(articleId) {
              if (!isAdmin) {
@@ -1109,3 +1009,5 @@
 
 </body>
 </html>
+
+
