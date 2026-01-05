@@ -7,12 +7,16 @@
     <script>
       (function () {
         const correctPassword = "WarteggZeitung2026!";
-        const entered = prompt("Bitte Password eingeben:");
-
-        if (entered !== correctPassword) {
-          alert("Zugriff abgelehnt.");
-          document.documentElement.innerHTML = "";
-          throw new Error("ZUGRIFF NICHT MÖGLICH, DIESER BEREICH IST NUR FÜR AUTHORISIERTE BENUTZER");
+        let entered = null;
+    
+        while (entered !== correctPassword) {
+          entered = prompt("Bitte Password engeben um fortzufahren:");
+    
+          if (entered === null) {
+            alert("Bitte geben Sie das Password in das Textfeld ein");
+          } else if (entered !== correctPassword) {
+            alert("Falsches Password, wiederholen Sie den Vorgang.");
+          }
         }
       })();
     </script>
