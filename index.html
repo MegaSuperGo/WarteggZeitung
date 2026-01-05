@@ -4,6 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Die Wartegg Zeitung</title>
+    <script>
+      (function () {
+        const correctPassword = "WarteggZeitung2026!";
+        const entered = prompt("Enter password to access this website:");
+
+        if (entered !== correctPassword) {
+          alert("Access denied");
+          document.documentElement.innerHTML = "";
+          throw new Error("Access denied");
+        }
+      })();
+    </script>
+
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Google Font: Inter -->
