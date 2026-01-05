@@ -5,17 +5,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Die Wartegg Zeitung</title>
     <script>
-      (function () {
-        const correctPassword = "WarteggZeitung2026!";
-        const entered = prompt("Bitte Password eingeben:");
+      const SITE_PASSWORD = "WarteggZeitung2026!";
 
-        if (entered !== correctPassword) {
-          alert("Zugriff abgelehnt.");
-          document.documentElement.innerHTML = "";
-          throw new Error("ZUGRIFF NICHT MÖGLICH, DIESER BEREICH IST NUR FÜR AUTHORISIERTE BENUTZER");
+      function checkPassword() {
+        const input = document.getElementById("password-input");
+        const error = document.getElementById("password-error");
+
+        if (input.value === SITE_PASSWORD) {
+          document.getElementById("password-gate").remove();
+        } else {
+          error.style.display = "block";
+          input.value = "";
+          input.focus();
         }
-      })();
-    </script>
+      }
+
+      // Allow Enter key
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && document.getElementById("password-gate")) {
+          checkPassword();
+        }
+  });
+</script>
 
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
